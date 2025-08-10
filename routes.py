@@ -18,6 +18,10 @@ CORS(app)
 
 load_dotenv(override=True)  # load variables from .env if present
 
+feedback_cache = {}
+
+
+
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise RuntimeError("OPENAI_API_KEY not set")
@@ -77,15 +81,26 @@ def converse():
     if not user_text:
         return jsonify(error="Empty text"), 400
 
-    # Add system prompt once with personalization
+    # Add system prompt once with CACHED personalization
     if not conv_manager.get_history(session_id):
-        # Get user's learning patterns from feedback
-        user_feedback = get_feedback_patterns(feedback_type="user_progress", limit=5)
-        session_feedback = [f for f in user_feedback if f.get('session_id') == session_id]
+        # Cache feedback data for this session
+        if session_id not in feedback_cache:
+            user_feedback = get_feedback_patterns(feedback_type="user_progress", limit=5)
+            learning_feedback = get_feedback_patterns(feedback_type="learning_experience", limit=10)
+            
+            feedback_cache[session_id] = {
+                'session_feedback': [f for f in user_feedback if f.get('session_id') == session_id],
+                'session_learning': [f for f in learning_feedback if f.get('session_id') == session_id],
+                'timestamp': time.time()
+            }
         
-        # Get learning experience feedback  
-        learning_feedback = get_feedback_patterns(feedback_type="learning_experience", limit=10)
-        session_learning = [f for f in learning_feedback if f.get('session_id') == session_id]
+        # Use cached data
+        cache_data = feedback_cache[session_id]
+        session_feedback = cache_data['session_feedback']
+        session_learning = cache_data['session_learning']
+        
+        # Build personalized system prompt (rest stays the same)
+        personalized_prompt = SYSTEM_PROMPT + f" Target language: {target_lang}."
         
         # Build personalized system prompt
         personalized_prompt = SYSTEM_PROMPT + f" Target language: {target_lang}."
@@ -122,11 +137,13 @@ LEARNER PROFILE:
                 if fb_type:
                     feedback_counts[fb_type] = feedback_counts.get(fb_type, 0) + 1
             
-    # More nuanced adjustments
-    if feedback_counts.get('too_hard', 0) >= 2:
-        personalized_prompt += "\n- User consistently finds responses too difficult - use simple vocabulary and short sentences"
-    elif feedback_counts.get('confused', 0) >= 2:
-        personalized_prompt += "\n- User gets confused frequently - provide examples and break down complex concepts"
+            # More nuanced adjustments - KEEP INSIDE THE if session_learning BLOCK
+            if feedback_counts.get('too_hard', 0) >= 2:
+                personalized_prompt += "\n- User consistently finds responses too difficult - use simple vocabulary and short sentences"
+            elif feedback_counts.get('confused', 0) >= 2:
+                personalized_prompt += "\n- User gets confused frequently - provide examples and break down complex concepts"
+
+        # MOVE THIS OUTSIDE - it should always execute regardless of feedback
         conv_manager.append(session_id, "system", personalized_prompt)
 
     # User message
@@ -150,6 +167,8 @@ LEARNER PROFILE:
         completion = client.chat.completions.create(
             model="gpt-4o-mini",  # Much faster than gpt-5 (~0.5s vs 2s)
             messages=messages,
+            max_tokens=150,  # Limit response length for speed
+            temperature=0.7  # Slightly lower for consistency   
         )
         
         reply = completion.choices[0].message.content.strip()

@@ -26,7 +26,37 @@ client = OpenAI(api_key=api_key)
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), "tts_out")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-SYSTEM_PROMPT = "You are a helpful conversational partner helping the user practice target language. Respond concisely."
+SYSTEM_PROMPT = """You are Russell from the Pixar movie UP - an enthusiastic, curious Boy Scout who loves asking questions. You're helping someone practice their target language through natural conversation.
+
+PERSONALITY TRAITS:
+- Very enthusiastic and energetic ("Oh wow!" "That's so cool!")
+- Asks follow-up questions to keep conversation flowing
+- Shares SHORT, relevant stories (1-2 sentences max)
+- Uses simple, friendly language but gradually increases complexity
+- Always positive and encouraging
+- Stays focused on the user's responses
+
+CONVERSATION STYLE:
+- Ask 1-2 questions per response, not more
+- Keep stories brief and directly related to what user said
+- Show genuine curiosity about the user's experiences
+- If they seem stuck, offer simple prompts
+- Keep responses conversational but concise (2-3 sentences max)
+
+LANGUAGE TEACHING APPROACH:
+- Naturally correct mistakes by restating correctly
+- Ask ONE follow-up question to practice different aspects
+- Introduce new vocabulary naturally, not in long lists
+- Focus on their response, not your own stories
+- Remember that you are helping them practice having a conversation in the langauge
+
+Example:
+User: "I went to store yesterday"
+Russell: "Oh wow, you WENT to the store! That sounds fun! What did you buy there?"
+
+NOT: "Oh wow, you WENT to the store! That's awesome! I love going to stores - one time I went to this huge camping store and they had sleeping bags that looked like giant hot dogs and camping gear everywhere, and Mr. Fredricksen told me about old camping stores from when he was young... What did you buy there?"
+
+Keep responses SHORT and USER-FOCUSED while staying enthusiastic!"""
 
 @app.route("/api/health")
 def health():
@@ -47,9 +77,57 @@ def converse():
     if not user_text:
         return jsonify(error="Empty text"), 400
 
-    # Add system prompt once
+    # Add system prompt once with personalization
     if not conv_manager.get_history(session_id):
-        conv_manager.append(session_id, "system", SYSTEM_PROMPT + f" Target language: {target_lang}.")
+        # Get user's learning patterns from feedback
+        user_feedback = get_feedback_patterns(feedback_type="user_progress", limit=5)
+        session_feedback = [f for f in user_feedback if f.get('session_id') == session_id]
+        
+        # Get learning experience feedback  
+        learning_feedback = get_feedback_patterns(feedback_type="learning_experience", limit=10)
+        session_learning = [f for f in learning_feedback if f.get('session_id') == session_id]
+        
+        # Build personalized system prompt
+        personalized_prompt = SYSTEM_PROMPT + f" Target language: {target_lang}."
+        
+        if session_feedback:
+            latest_progress = session_feedback[-1].get('feedback_data', {})
+            level = latest_progress.get('estimated_level', 'A2')
+            grammar_score = latest_progress.get('grammar_score', 5)
+            errors = latest_progress.get('errors', [])
+            
+            personalized_prompt += f"""
+            
+LEARNER PROFILE:
+- Current level: {level}
+- Grammar score: {grammar_score}/10
+- Common errors: {[e.get('type') for e in errors[:3]]}
+- Adjust difficulty to their level
+- Focus on their weak areas
+"""
+        
+        if session_learning:
+            recent_feedback = [f.get('feedback_data', {}).get('learning_feedback') for f in session_learning[-3:]]
+            if 'too_hard' in recent_feedback:
+                personalized_prompt += "\n- User finds responses too difficult - simplify language"
+            elif 'too_easy' in recent_feedback:
+                personalized_prompt += "\n- User finds responses too easy - increase complexity"
+            elif 'confused' in recent_feedback:
+                personalized_prompt += "\n- User gets confused - be more explicit and clear"
+
+            # Count feedback types for better decisions
+            feedback_counts = {}
+            for f in session_learning[-5:]:  # Last 5 feedbacks
+                fb_type = f.get('feedback_data', {}).get('learning_feedback')
+                if fb_type:
+                    feedback_counts[fb_type] = feedback_counts.get(fb_type, 0) + 1
+            
+    # More nuanced adjustments
+    if feedback_counts.get('too_hard', 0) >= 2:
+        personalized_prompt += "\n- User consistently finds responses too difficult - use simple vocabulary and short sentences"
+    elif feedback_counts.get('confused', 0) >= 2:
+        personalized_prompt += "\n- User gets confused frequently - provide examples and break down complex concepts"
+        conv_manager.append(session_id, "system", personalized_prompt)
 
     # User message
     conv_manager.append(session_id, "user", user_text)
@@ -59,6 +137,14 @@ def converse():
         print("Store user error:", e)
 
     messages = conv_manager.get_history(session_id)
+    contextual_feedback = get_contextual_feedback(session_id, user_text)
+        
+    if contextual_feedback:
+        recent_similar_feedback = [f.get('feedback_data', {}).get('learning_feedback') for f in contextual_feedback[-3:]]
+        if 'too_hard' in recent_similar_feedback:
+            messages.append({"role": "system", "content": "For similar topics, user found responses too difficult. Simplify language."})
+        elif 'confused' in recent_similar_feedback:
+            messages.append({"role": "system", "content": "For similar topics, user was confused. Be extra clear and provide examples."})
 
     try:
         completion = client.chat.completions.create(
@@ -98,20 +184,58 @@ def converse():
     audio_filename = None
     if tts:
         try:
+            # Use OpenAI TTS instead of gTTS for more natural voice
             audio_filename = f"{uuid.uuid4().hex}.mp3"
-            # Use faster TTS settings
-            tts_lang = target_lang.split('-')[0]  # Use base language code
-            tts_obj = gTTS(reply, lang=tts_lang, slow=False)  # Ensure fast speech
-            tts_obj.save(os.path.join(AUDIO_DIR, audio_filename))
+            audio_path = os.path.join(AUDIO_DIR, audio_filename)
+            
+            # OpenAI TTS with Russell-appropriate male voice
+            response = client.audio.speech.create(
+                model="tts-1-hd",  # Higher quality for better sound
+                voice="alloy",     # Changed to male voice - options: alloy (neutral male), echo (clear male), onyx (deep male)
+                input=reply,
+                speed=1.1          # Slightly faster for Russell's energetic personality
+            )
+            
+            response.stream_to_file(audio_path)
+            
         except Exception as e:
-            print("TTS error:", e)
-            audio_filename = None
+            print("OpenAI TTS error:", e)
+            # Fallback to gTTS
+            try:
+                tts_lang = target_lang.split('-')[0]
+                tts_obj = gTTS(reply, lang=tts_lang, slow=False)
+                tts_obj.save(audio_path)
+            except:
+                audio_filename = None
 
+    # ADD THIS RETURN STATEMENT:
     return jsonify(
         session_id=session_id,
         reply=reply,
         audio_url=f"/api/audio/{audio_filename}" if audio_filename else None
     )
+
+def get_contextual_feedback(session_id: str, user_message: str):
+    """Get relevant feedback for similar past interactions"""
+    try:
+        # Search for similar conversations
+        similar_interactions = semantic_search(session_id, user_message, top_k=5)
+        
+        # Get feedback for those interactions
+        relevant_feedback = []
+        for interaction in similar_interactions:
+            # Find feedback for this type of conversation
+            feedback = get_feedback_patterns(feedback_type="learning_experience", limit=20)
+            for f in feedback:
+                if f.get('session_id') == session_id:
+                    ai_response = f.get('feedback_data', {}).get('ai_response', '')
+                    if ai_response in [i.get('content', '') for i in similar_interactions]:
+                        relevant_feedback.append(f)
+        
+        return relevant_feedback
+    except:
+        return []
+
 
 @app.route("/api/search", methods=["GET"])
 def search():
@@ -217,32 +341,6 @@ def search():
         
 #     except Exception as e:
 #         return jsonify(error=str(e)), 500
-
-@app.route("/api/user/feedback", methods=["POST"])
-def user_learning_feedback():
-    """Store user's learning experience feedback"""
-    data = request.get_json()
-    session_id = data.get("session_id")
-    learning_feedback = data.get("learning_feedback")
-    ai_response = data.get("ai_response")
-    user_message = data.get("user_message")
-    
-    try:
-        # Store learning experience
-        feedback_data = {
-            "learning_feedback": learning_feedback,
-            "ai_response": ai_response,
-            "user_message": user_message,
-            "timestamp": time.time()
-        }
-        
-        store_feedback(session_id, f"learning-{int(time.time()*1000)}", 
-                      "learning_experience", feedback_data)
-        
-        return jsonify(success=True)
-        
-    except Exception as e:
-        return jsonify(error=str(e)), 500
 
 
 @app.route("/api/analytics/<session_id>", methods=["GET"])
@@ -350,8 +448,20 @@ def analyze_user_response():
         def store_user_progress():
             try:
                 import json
-                progress_data = json.loads(analysis.choices[0].message.content)
+                response_text = analysis.choices[0].message.content.strip()
+                
+                # Handle cases where GPT doesn't return valid JSON
+                if not response_text.startswith('{'):
+                    print(f"Invalid JSON response: {response_text[:100]}...")
+                    return
+                
+                progress_data = json.loads(response_text)
                 store_feedback(session_id, f"user-{int(time.time()*1000)}", "user_progress", progress_data)
+                print(f"[User Progress] Stored analysis for session {session_id}")
+                
+            except json.JSONDecodeError as e:
+                print(f"JSON parsing error: {e}")
+                print(f"Response was: {analysis.choices[0].message.content[:200]}...")
             except Exception as e:
                 print("Store user progress error:", e)
         
@@ -413,6 +523,36 @@ def get_user_progress(session_id):
         )
         
     except Exception as e:
+        return jsonify(error=str(e)), 500
+    
+@app.route("/api/user/feedback", methods=["POST"])
+def user_learning_feedback():
+    """Store user's learning experience feedback"""
+    data = request.get_json()
+    session_id = data.get("session_id")
+    learning_feedback = data.get("learning_feedback")
+    ai_response = data.get("ai_response")
+    user_message = data.get("user_message")
+    target_lang = data.get("target_lang")
+    
+    try:
+        # Store learning experience
+        feedback_data = {
+            "learning_feedback": learning_feedback,
+            "ai_response": ai_response,
+            "user_message": user_message,
+            "target_lang": target_lang,
+            "timestamp": time.time()
+        }
+        
+        message_pair_id = f"learning-{session_id}-{int(time.time()*1000)}"
+        store_feedback(session_id, message_pair_id, "learning_experience", feedback_data)
+        
+        print(f"[Learning Feedback] {learning_feedback} from session {session_id}")
+        return jsonify(success=True)
+        
+    except Exception as e:
+        print("Learning feedback error:", e)
         return jsonify(error=str(e)), 500
     
 if __name__ == "__main__":

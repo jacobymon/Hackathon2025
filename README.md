@@ -129,8 +129,6 @@ To remove old audio:
 find tts_out -type f -mtime +1 -delete
 ```
 
-## License
-Add a license file if distributing.
 
 ## Next Ideas
 - Multi-turn correction summaries

@@ -131,7 +131,8 @@ find tts_out -type f -mtime +1 -delete
 
 
 ## Next Ideas
+- Improved avatar to show boddy langauge while replying
 - Multi-turn correction summaries
 - CEFR adaptive goals
-- Gamification badges
+- More insightful user feedback on their conversation
 - Frontend transcript + highlighted corrections

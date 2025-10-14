@@ -76,7 +76,7 @@ def converse():
     user_text = data.get("text", "").strip()
     target_lang = data.get("lang", "en")
     session_id = data.get("session_id") or "default"
-    tts = bool(data.get("tts", True))
+    tts = bool(data.get("tts", True)) # TODO: change to elevenlabs
 
     if not user_text:
         return jsonify(error="Empty text"), 400

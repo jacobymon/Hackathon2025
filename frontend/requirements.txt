@@ -1,0 +1,21 @@
+# Core web
+Flask==3.0.3
+flask-cors==4.0.0
+
+# OpenAI + embeddings
+openai==1.37.0
+
+# Text‑to‑speech
+gTTS==2.5.1
+
+# Env vars
+python-dotenv==1.0.1
+
+# Vector store (optional; include only if you added Pinecone code)
+pinecone-client==3.2.2
+
+# Misc (HTTP utilities)
+requests==2.32.3
+
+# Production server (optional)
+gunicorn==22.0.0

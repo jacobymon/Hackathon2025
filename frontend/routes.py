@@ -62,6 +62,10 @@ NOT: "Oh wow, you WENT to the store! That's awesome! I love going to stores - on
 
 Keep responses SHORT and USER-FOCUSED while staying enthusiastic!"""
 
+@app.route('/')
+def getMainRequest():
+    return "Hi, Server is running fine!"
+
 @app.route("/api/health")
 def health():
     return {"status": "ok"}

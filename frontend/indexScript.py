@@ -1,4 +1,4 @@
-from pine_store import Pinecone, ServerlessSpec
+from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
 import os, sys
 

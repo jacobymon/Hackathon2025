@@ -1,8 +1,7 @@
 import os
 import uuid
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, render_template
 from flask_cors import CORS
-from gtts import gTTS
 from openai import OpenAI
 from conv_manager import conv_manager
 from dotenv import load_dotenv  # added
@@ -11,7 +10,8 @@ from pine_store import store_message, semantic_search, store_feedback, get_feedb
 import threading
 import time
 import requests
-
+from elevenlabs.client import ElevenLabs
+from elevenlabs.play import play
 
 app = Flask(__name__)
 CORS(app)
@@ -20,11 +20,17 @@ load_dotenv(override=True)  # load variables from .env if present
 
 feedback_cache = {}
 
-
+# Global constants
+model_id = "eleven_multilingual_v2"
+output_format = "mp3_44100_128"
 
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise RuntimeError("OPENAI_API_KEY not set")
+
+elevenlabs = ElevenLabs(
+  api_key=os.getenv("ELEVENLABS_API_KEY"),
+)
 
 client = OpenAI(api_key=api_key)
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), "tts_out")
@@ -63,8 +69,8 @@ NOT: "Oh wow, you WENT to the store! That's awesome! I love going to stores - on
 Keep responses SHORT and USER-FOCUSED while staying enthusiastic!"""
 
 @app.route('/')
-def getMainRequest():
-    return "Hi, Server is running fine!"
+def index():
+    return render_template('index.html')
 
 @app.route("/api/health")
 def health():
@@ -76,11 +82,14 @@ def get_audio(fname):
 
 @app.route("/api/converse", methods=["POST"])
 def converse():
-    data = request.get_json(force=True)
+    content_type = request.headers.get('Content-Type')
+    print("CONTENT TYPE: ", content_type)
+    data = request.get_json()
+    print(data)
     user_text = data.get("text", "").strip()
     target_lang = data.get("lang", "en")
     session_id = data.get("session_id") or "default"
-    tts = bool(data.get("tts", True))
+    tts = elevenlabs.text_to_speech
 
     if not user_text:
         return jsonify(error="Empty text"), 400
@@ -205,31 +214,21 @@ LEARNER PROFILE:
     threading.Thread(target=background_analysis, daemon=True).start()
 
     audio_filename = None
-    if tts:
-        try:
-            # Use OpenAI TTS instead of gTTS for more natural voice
-            audio_filename = f"{uuid.uuid4().hex}.mp3"
-            audio_path = os.path.join(AUDIO_DIR, audio_filename)
+
+
+    # Use OpenAI TTS instead of ElevenLabs for more natural voice
+    audio_filename = f"{uuid.uuid4().hex}.mp3"
+    audio_path = os.path.join(AUDIO_DIR, audio_filename)
             
-            # OpenAI TTS with Russell-appropriate male voice
-            response = client.audio.speech.create(
-                model="tts-1-hd",  # Higher quality for better sound
-                voice="alloy",     # Changed to male voice - options: alloy (neutral male), echo (clear male), onyx (deep male)
-                input=reply,
-                speed=1.1          # Slightly faster for Russell's energetic personality
-            )
+    # OpenAI TTS with Russell-appropriate male voice
+    response = tts.convert(
+        text=reply,
+        voice_id=audio_filename,
+        model_id=model_id,
+        output_format=output_format
+        )
             
-            response.stream_to_file(audio_path)
-            
-        except Exception as e:
-            print("OpenAI TTS error:", e)
-            # Fallback to gTTS
-            try:
-                tts_lang = target_lang.split('-')[0]
-                tts_obj = gTTS(reply, lang=tts_lang, slow=False)
-                tts_obj.save(audio_path)
-            except:
-                audio_filename = None
+    play(response)
 
     # ADD THIS RETURN STATEMENT:
     return jsonify(

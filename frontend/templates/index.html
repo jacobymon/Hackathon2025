@@ -76,10 +76,11 @@
   <!-- TTS Section -->
   <div class="card">
     <h2>Text to Speech</h2>
-    <form action="/api//converse" method="POST">
+    <form action="/api/converse" method="POST">
       <textarea name="text" rows="4" placeholder="Enter text here..."></textarea>
       <button type="submit">Convert to Speech</button>
     </form>
+    <script src="{{ url_for('static', filename='requesthandler.js') }}"></script>
     {% if audio_url %}
       <audio controls>
         <source src="{{ audio_url }}" type="audio/mpeg">

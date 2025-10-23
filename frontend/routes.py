@@ -10,8 +10,18 @@ from pine_store import store_message, semantic_search, store_feedback, get_feedb
 import threading
 import time
 import requests
+import json
 from elevenlabs.client import ElevenLabs
 from elevenlabs.play import play
+
+
+url = "http://localhost:5000/your_endpoint"  # Replace with your Flask endpoint
+data = {"key1": "value1", "key2": "value2"}
+
+headers = {"Content-Type": "application/json"}
+
+response = requests.post(url, data=json.dumps(data), headers=headers)
+
 
 app = Flask(__name__)
 CORS(app)

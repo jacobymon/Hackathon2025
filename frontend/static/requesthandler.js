@@ -1,15 +1,24 @@
+// static/requesthandler.js
+console.log("✅ JS loaded successfully");
+document.addEventListener("DOMContentLoaded", () => {
+  // Handle TTS
+  const ttsForm = document.getElementById("ttsForm");
+  if (ttsForm) {
+    console.log("ttsForm found");
+    ttsForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
 
+      const text = document.getElementById("ttsText").value;
+      console.log("Sending TTS:", text);
 
-document.getElementById("converseForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const message = document.getElementById("message").value;
-    console.log("Message: ", message);
-    const res = await fetch("/api/converse", {
+      const res = await fetch("/api/converse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message })
-    });
+        body: JSON.stringify({ text })
+      });
 
-    const data = await res.json();
-    console.log("Response:", data);
+      const data = await res.json();
+      console.log("Response from Flask (TTS):", data);
+    });
+  }
 });

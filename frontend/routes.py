@@ -14,15 +14,6 @@ import json
 from elevenlabs.client import ElevenLabs
 from elevenlabs.play import play
 
-
-url = "http://localhost:5000/your_endpoint"  # Replace with your Flask endpoint
-data = {"key1": "value1", "key2": "value2"}
-
-headers = {"Content-Type": "application/json"}
-
-response = requests.post(url, data=json.dumps(data), headers=headers)
-
-
 app = Flask(__name__)
 CORS(app)
 
@@ -95,12 +86,19 @@ def converse():
     content_type = request.headers.get('Content-Type')
     print("CONTENT TYPE: ", content_type)
     data = request.get_json()
-    print(data)
+    print("DATA: ", data)
     user_text = data.get("text", "").strip()
     target_lang = data.get("lang", "en")
     session_id = data.get("session_id") or "default"
     tts = elevenlabs.text_to_speech
-
+    response = tts.convert(
+        text="hello",
+        voice_id="JBFqnCBsd6RMkjVDRZzb",
+        model_id=model_id,
+        output_format=output_format
+        )
+            
+    play(response)
     if not user_text:
         return jsonify(error="Empty text"), 400
 
@@ -231,14 +229,14 @@ LEARNER PROFILE:
     audio_path = os.path.join(AUDIO_DIR, audio_filename)
             
     # OpenAI TTS with Russell-appropriate male voice
-    response = tts.convert(
-        text=reply,
-        voice_id=audio_filename,
-        model_id=model_id,
-        output_format=output_format
-        )
+    # response = tts.convert(
+    #     text=reply,
+    #     voice_id=audio_filename,
+    #     model_id=model_id,
+    #     output_format=output_format
+    #     )
             
-    play(response)
+    # play(response)
 
     # ADD THIS RETURN STATEMENT:
     return jsonify(

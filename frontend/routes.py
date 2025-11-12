@@ -11,8 +11,14 @@ import threading
 import time
 import requests
 import json
+from io import BytesIO
 from elevenlabs.client import ElevenLabs
 from elevenlabs.play import play
+from pydub import AudioSegment
+# Helper functions 
+from helpers import record_audio
+# temporary fix for ffmpeg not working in conda env. Adding local installation path instead.
+os.environ['PATH'] += os.pathsep + 'C:/Users/awang/ffmpeg-2025-10-30-git-00c23bafb0-essentials_build/bin'
 
 app = Flask(__name__)
 CORS(app)
@@ -24,6 +30,7 @@ feedback_cache = {}
 # Global constants
 model_id = "eleven_multilingual_v2"
 output_format = "mp3_44100_128"
+voice_id = "JBFqnCBsd6RMkjVDRZzb"
 
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
@@ -69,6 +76,7 @@ NOT: "Oh wow, you WENT to the store! That's awesome! I love going to stores - on
 
 Keep responses SHORT and USER-FOCUSED while staying enthusiastic!"""
 
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -81,6 +89,64 @@ def health():
 def get_audio(fname):
     return send_from_directory(AUDIO_DIR, fname, mimetype="audio/mpeg", as_attachment=False)
 
+@app.route("/api/tts", methods=["POST"])
+def tts():
+    content_type = request.headers.get('Content-Type')
+    print("CONTENT TYPE: ", content_type)
+    data = request.get_json()
+    print("DATA: ", data)
+    user_text = data.get("text", "").strip()
+    tts = elevenlabs.text_to_speech
+    response = tts.convert(
+        text=user_text,
+        voice_id=voice_id,
+        model_id=model_id,
+        output_format=output_format
+    )
+            
+    play(response)
+
+    return jsonify({"status": 200})
+
+@app.route("/api/stt", methods=["POST"])
+def stt():
+    if "audio" not in request.files:
+        return jsonify({"error": "No audio uploaded"}), 400
+
+    audio_file = request.files["audio"]
+    print("🎙 Received recorded file:", audio_file.filename)
+
+    audio = AudioSegment.from_file(audio_file, format="webm")
+    mp3_bytes = BytesIO()
+    audio.export(mp3_bytes, format="mp3", bitrate="192k")
+    mp3_bytes.seek(0)
+
+    transcription = elevenlabs.speech_to_text.convert(
+        file=mp3_bytes,
+        model_id="scribe_v1", # Model to use, for now only "scribe_v1" is supported
+        tag_audio_events=True, # Tag audio events like laughter, applause, etc.
+        language_code="eng", # Language of the audio file. If set to None, the model will detect the language automatically.
+        diarize=True, # Whether to annotate who is speaking
+    )
+
+    print(transcription)
+
+    return jsonify({"text": transcription})
+    # content_type = request.headers.get('Content-Type')
+    # print("CONTENT TYPE: ", content_type)
+    # data = request.get_json()
+    # print("DATA: ", data)
+    # audio_file = "C:/Users/awang/Hackathon2025/tts_out/audio.mp3"
+    # record_audio(duration=10, mp3_filename=audio_file)
+    # transcription = client.audio.transcriptions.create(
+    #     model="gpt-4o-transcribe", 
+    #     file=audio_file
+    # )
+
+    # print(transcription.text)
+
+    # return
+
 @app.route("/api/converse", methods=["POST"])
 def converse():
     content_type = request.headers.get('Content-Type')
@@ -90,17 +156,10 @@ def converse():
     user_text = data.get("text", "").strip()
     target_lang = data.get("lang", "en")
     session_id = data.get("session_id") or "default"
-    tts = elevenlabs.text_to_speech
-    response = tts.convert(
-        text="hello",
-        voice_id="JBFqnCBsd6RMkjVDRZzb",
-        model_id=model_id,
-        output_format=output_format
-        )
-            
-    play(response)
+
     if not user_text:
         return jsonify(error="Empty text"), 400
+
 
     # Add system prompt once with CACHED personalization
     if not conv_manager.get_history(session_id):

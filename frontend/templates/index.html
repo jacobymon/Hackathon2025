@@ -89,7 +89,7 @@
   </div>
 
   <!-- STT Section -->
-  <div class="card">
+  <!-- <div class="card">
     <h2>Speech to Text</h2>
     <form action="/api/converse" method="POST" enctype="multipart/form-data">
       <input type="file" name="audio" accept="audio/*">
@@ -101,7 +101,17 @@
         {{ text }}
       </div>
     {% endif %}
-  </div>
+  </div> -->
+  <div class="card">
+  <h2>Speech to Text (Record)</h2>
+  <form id ="sttForm">
+      <button id="recordBtn">🎙 Start Recording</button>
+      <audio id="playback" controls></audio>
+      <button id="uploadBtn">⬆️ Send to Flask</button>
+      <div id="sttResult"></div>
+
+  </form>
+</div>
 <script src="{{ url_for('static', filename='requesthandler.js') }}"></script>
  </body>
 </html>

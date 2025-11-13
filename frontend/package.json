@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "extendable-media-recorder": "^9.2.31"
+  }
+}

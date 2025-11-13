@@ -47,7 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         mediaRecorder.onstop = () => {
-          audioBlob = new Blob(audioChunks, { type: "audio/mp3" });
+          audioBlob = new Blob(audioChunks, { type: "audio/webm" });
           playback.src = URL.createObjectURL(audioBlob);
           uploadBtn.disabled = false;
         };
@@ -62,13 +62,13 @@ document.addEventListener("DOMContentLoaded", () => {
         sttResult.textContent = "Recording stopped.";
       }
     });
-
     uploadBtn.addEventListener("click", async () => {
       if (!audioBlob) return alert("Please record something first.");
+      console.log("AUDIO BLOB: ", audioBlob);
 
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
-      console.log("FORM DATA: ", formData);
+      console.log("FORM DATA WITH AUDIO FILE: ",formData);
       try {
         console.log("SENDING AUDIO FILE TO STT");
         const res = await fetch("/api/stt", {

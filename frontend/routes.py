@@ -15,10 +15,12 @@ from io import BytesIO
 from elevenlabs.client import ElevenLabs
 from elevenlabs.play import play
 from pydub import AudioSegment
+from pydub.utils import which
+
 # Helper functions 
 from helpers import record_audio
 # temporary fix for ffmpeg not working in conda env. Adding local installation path instead.
-os.environ['PATH'] += os.pathsep + 'C:/Users/awang/ffmpeg-2025-10-30-git-00c23bafb0-essentials_build/bin'
+# os.environ['PATH'] += os.pathsep + 'C:/Users/awang/ffmpeg-2025-10-30-git-00c23bafb0-essentials_build/bin'
 
 app = Flask(__name__)
 CORS(app)
@@ -110,28 +112,41 @@ def tts():
 
 @app.route("/api/stt", methods=["POST"])
 def stt():
+    print("FILES received:", request.files)
+    print("FORM keys:", request.form.keys())
+    for key, file in request.files.items():
+        print(f"{key}: filename={file.filename}, content_type={file.content_type}, size={len(file.read())} bytes")
+        file.seek(0) 
     if "audio" not in request.files:
         return jsonify({"error": "No audio uploaded"}), 400
+    try:
+        audio_file = request.files["audio"]
+        print("🎙 Received recorded file:", audio_file.filename)
 
-    audio_file = request.files["audio"]
-    print("🎙 Received recorded file:", audio_file.filename)
+        # AudioSegment.converter = r"C:\Users\awang\anaconda3\envs\lancon\Library\bin\ffmpeg.exe"
+        print(f"FFmpeg path '{AudioSegment.converter}' successfully used to load audio.")
+        print("start converting")
+        audio = AudioSegment.from_file(audio_file, format="webm")
+        print("Audio duration (ms):", len(audio))
+        print(type(audio))
+        mp3_bytes = BytesIO()
+        audio.export(mp3_bytes, format="mp3", bitrate="192k")
+        mp3_bytes.seek(0)
 
-    audio = AudioSegment.from_file(audio_file, format="webm")
-    mp3_bytes = BytesIO()
-    audio.export(mp3_bytes, format="mp3", bitrate="192k")
-    mp3_bytes.seek(0)
+        transcription = elevenlabs.speech_to_text.convert(
+            file=mp3_bytes,
+            model_id="scribe_v1", # Model to use, for now only "scribe_v1" is supported
+            tag_audio_events=True, # Tag audio events like laughter, applause, etc.
+            language_code="eng", # Language of the audio file. If set to None, the model will detect the language automatically.
+            diarize=True, # Whether to annotate who is speaking
+        )
 
-    transcription = elevenlabs.speech_to_text.convert(
-        file=mp3_bytes,
-        model_id="scribe_v1", # Model to use, for now only "scribe_v1" is supported
-        tag_audio_events=True, # Tag audio events like laughter, applause, etc.
-        language_code="eng", # Language of the audio file. If set to None, the model will detect the language automatically.
-        diarize=True, # Whether to annotate who is speaking
-    )
-
-    print(transcription)
-
-    return jsonify({"text": transcription})
+        print(transcription)
+        return jsonify({"text": transcription}), 200
+    except Exception as e:
+    # Handles any other unhandled exception
+        print(f"An unexpected error occurred: {e}")
+        return jsonify({"error": str(e)}), 500
     # content_type = request.headers.get('Content-Type')
     # print("CONTENT TYPE: ", content_type)
     # data = request.get_json()

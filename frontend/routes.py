@@ -123,44 +123,21 @@ def stt():
         audio_file = request.files["audio"]
         print("🎙 Received recorded file:", audio_file.filename)
 
-        # AudioSegment.converter = r"C:\Users\awang\anaconda3\envs\lancon\Library\bin\ffmpeg.exe"
-        print(f"FFmpeg path '{AudioSegment.converter}' successfully used to load audio.")
-        print("start converting")
-        audio = AudioSegment.from_file(audio_file, format="webm")
-        print("Audio duration (ms):", len(audio))
-        print(type(audio))
-        mp3_bytes = BytesIO()
-        audio.export(mp3_bytes, format="mp3", bitrate="192k")
-        mp3_bytes.seek(0)
-
+        audio_bytes = audio_file.read()
+        audio_data = BytesIO(audio_bytes)
         transcription = elevenlabs.speech_to_text.convert(
-            file=mp3_bytes,
+            file=audio_data,
             model_id="scribe_v1", # Model to use, for now only "scribe_v1" is supported
             tag_audio_events=True, # Tag audio events like laughter, applause, etc.
-            language_code="eng", # Language of the audio file. If set to None, the model will detect the language automatically.
             diarize=True, # Whether to annotate who is speaking
         )
 
         print(transcription)
-        return jsonify({"text": transcription}), 200
+        return jsonify({"text": transcription.text}), 200
     except Exception as e:
     # Handles any other unhandled exception
         print(f"An unexpected error occurred: {e}")
         return jsonify({"error": str(e)}), 500
-    # content_type = request.headers.get('Content-Type')
-    # print("CONTENT TYPE: ", content_type)
-    # data = request.get_json()
-    # print("DATA: ", data)
-    # audio_file = "C:/Users/awang/Hackathon2025/tts_out/audio.mp3"
-    # record_audio(duration=10, mp3_filename=audio_file)
-    # transcription = client.audio.transcriptions.create(
-    #     model="gpt-4o-transcribe", 
-    #     file=audio_file
-    # )
-
-    # print(transcription.text)
-
-    # return
 
 @app.route("/api/converse", methods=["POST"])
 def converse():

@@ -1,5 +1,6 @@
 // static/requesthandler.js
 console.log("✅ JS loaded successfully");
+import { convertWavToMp3 } from './audio_recording.js';
 document.addEventListener("DOMContentLoaded", () => {
   // Handle TTS
   const ttsForm = document.getElementById("ttsForm");
@@ -65,7 +66,6 @@ document.addEventListener("DOMContentLoaded", () => {
     uploadBtn.addEventListener("click", async () => {
       if (!audioBlob) return alert("Please record something first.");
       console.log("AUDIO BLOB: ", audioBlob);
-
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
       console.log("FORM DATA WITH AUDIO FILE: ",formData);
